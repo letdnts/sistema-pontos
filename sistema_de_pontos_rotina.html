@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema de pontos – rotina</title>
+  <link rel="stylesheet" href="sistema_de_pontos_rotina.css">
+  <link rel="icon" href="icon.png" type="image/png">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">Sistema de pontos</h1>
+      <p class="page-lead">Marque o que cumpriu hoje e acompanhe pontos e valor estimado no mês.</p>
+    </header>
+
+    <main class="container">
+      <section class="calendar-card" aria-label="Calendário">
+        <div class="calendar-head">
+          <button type="button" class="cal-nav" id="cal-prev" aria-label="Mês anterior">‹</button>
+          <h2 class="calendar-title" id="cal-month-label">—</h2>
+          <button type="button" class="cal-nav" id="cal-next" aria-label="Próximo mês">›</button>
+          <button type="button" class="cal-today" id="cal-today">Hoje</button>
+        </div>
+        <div class="calendar-weekdays">
+          <span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span>
+        </div>
+        <div class="calendar-grid" id="cal-grid"></div>
+        <p class="calendar-selected" id="selected-date-display"></p>
+      </section>
+
+      <div class="summary-grid">
+        <div class="metric">
+          <div class="metric-label" id="metric-day-label">Pontos hoje</div>
+          <div class="metric-value" id="pts-hoje">0</div>
+          <div class="metric-sub">de <span id="pts-max">0</span> possíveis</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Valor/ponto (R$)</div>
+          <div class="metric-input-wrap">
+            <input type="number" class="rate-input rate-input--metric" id="rate-input" value="0.25" min="0.01" step="0.01">
+          </div>
+          <div class="metric-sub">edite o valor acima</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Ganho mensal máx.</div>
+          <div class="metric-value metric-value--accent" id="ganho-max">R$0</div>
+          <div class="metric-sub">se fizer tudo</div>
+        </div>
+      </div>
+
+      <div class="page-toolbar">
+        <button type="button" class="reset-btn" onclick="resetAll()">Reiniciar dia</button>
+        <a class="reset-btn" href="tarefas_banco.html">Gerenciar tarefas</a>
+      </div>
+
+      <div id="tasks-mount"></div>
+
+      <div class="ask-actions">
+        <button type="button" class="ask-btn" onclick="sendPrompt('Como funciona o sistema de bônus de consistência na prática? Me dá exemplos.')">Como funciona o bônus de consistência na prática? ↗</button>
+        <button type="button" class="ask-btn" onclick="sendPrompt('Quais estratégias eu e minha irmã podemos usar para tornar esse sistema ainda mais efetivo para TDAH e TEA?')">Estratégias para minha irmã aplicar junto comigo ↗</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  /** Troque por integração real (ex.: enviar para um assistente) quando quiser. */
+  function sendPrompt(msg) {
+    console.log('[sendPrompt]', msg);
+  }
+
+  const STORAGE_KEY = 'sistemaPontosRotina_v2';
+
+  const SECTION_META = [
+    { key: 'saude', label: 'Saúde & corpo', titleClass: 'section-title--tight section-title--saude' },
+    { key: 'casa', label: 'Casa', titleClass: 'section-title--casa' },
+    { key: 'estudo', label: 'Estudo & leitura', titleClass: 'section-title--estudo' },
+    { key: 'cel', label: 'Controle do celular', titleClass: 'section-title--cel' },
+    { key: 'bonus', label: 'Bônus de consistência', titleClass: 'section-title--bonus' }
+  ];
+
+  const DEFAULT_TASKS_ALL = [
+    { id: 't01', name: 'Passeio com a Cacau – manhã', pts: 15, freq: 'diário', section: 'saude' },
+    { id: 't02', name: 'Passeio com a Cacau – tarde', pts: 15, freq: 'diário', section: 'saude' },
+    { id: 't03', name: 'Treinar (academia)', pts: 20, freq: 'diário', section: 'saude' },
+    { id: 't04', name: 'Dormir até meia-noite', pts: 10, freq: 'diário', section: 'saude' },
+    { id: 't05', name: 'Tomar água (mínimo 2L)', pts: 10, freq: 'diário', section: 'saude' },
+    { id: 't06', name: 'Banhar a Cacau', pts: 25, freq: 'semanal', section: 'saude' },
+    { id: 't07', name: 'Lavar a louça', pts: 15, freq: 'diário', section: 'casa' },
+    { id: 't08', name: 'Varrer a casa', pts: 20, freq: 'diário', section: 'casa' },
+    { id: 't09', name: 'Lavar roupa', pts: 25, freq: 'semanal', section: 'casa' },
+    { id: 't10', name: 'Organizar quarto / espaço pessoal', pts: 15, freq: 'semanal', section: 'casa' },
+    { id: 't11', name: 'Ler 1 capítulo + resumo escrito', pts: 20, freq: 'diário', section: 'estudo' },
+    { id: 't12', name: 'Ler artigo científico + resumo', pts: 30, freq: 'semanal', section: 'estudo' },
+    { id: 't13', name: 'Estudar / praticar algo por 30 min', pts: 15, freq: 'diário', section: 'estudo' },
+    { id: 't14', name: 'Nenhum celular na 1ª hora do dia', pts: 20, freq: 'diário', section: 'cel' },
+    { id: 't15', name: 'Celular fora do quarto após 22h', pts: 20, freq: 'diário', section: 'cel' },
+    { id: 't16', name: 'Máx. 2h de redes sociais (screentime)', pts: 15, freq: 'diário', section: 'cel' },
+    { id: 't17', name: 'Completar todas as tarefas diárias por 3 dias seguidos', pts: 50, freq: 'semanal', section: 'bonus' },
+    { id: 't18', name: 'Semana perfeita (todas as tarefas em 7 dias)', pts: 100, freq: 'mensal', section: 'bonus' },
+    { id: 't19', name: 'Melhor mês (superar pontuação do mês anterior)', pts: 200, freq: 'mensal', section: 'bonus' }
+  ];
+
+  function cloneTasks(arr) {
+    return JSON.parse(JSON.stringify(arr));
+  }
+
+  function newTaskId() {
+    return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function normalizeTasks(arr) {
+    const allowedFreq = { 'diário': 1, 'semanal': 1, 'mensal': 1 };
+    const allowedSec = { saude: 1, casa: 1, estudo: 1, cel: 1, bonus: 1 };
+    const out = [];
+    const seen = {};
+    (Array.isArray(arr) ? arr : []).forEach(function (t) {
+      let id = String(t.id || '').trim();
+      if (!id) id = newTaskId();
+      while (seen[id]) id = newTaskId();
+      seen[id] = 1;
+      const section = allowedSec[t.section] ? t.section : 'saude';
+      const freq = allowedFreq[t.freq] ? t.freq : 'diário';
+      let pts = parseInt(t.pts, 10);
+      if (!pts || pts < 1) pts = 1;
+      if (pts > 999) pts = 999;
+      let name = String(t.name || '').trim();
+      if (!name) name = 'Tarefa';
+      out.push({ id: id, name: name, pts: pts, freq: freq, section: section });
+    });
+    return out;
+  }
+
+  const STORAGE_KEY_V1 = 'sistemaPontosRotina_v1';
+
+  function loadState() {
+    const empty = { rate: 0.25, days: {}, tasks: cloneTasks(DEFAULT_TASKS_ALL) };
+    try {
+      let raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        const oldRaw = localStorage.getItem(STORAGE_KEY_V1);
+        if (oldRaw) {
+          const o = JSON.parse(oldRaw);
+          const rate = typeof o.rate === 'number' && !isNaN(o.rate) ? o.rate : 0.25;
+          const days = o.days && typeof o.days === 'object' && !Array.isArray(o.days) ? o.days : {};
+          const migrated = { rate: rate, days: days, tasks: cloneTasks(DEFAULT_TASKS_ALL) };
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          } catch (e2) { /* ignore */ }
+          return migrated;
+        }
+        return empty;
+      }
+      const o = JSON.parse(raw);
+      const rate = typeof o.rate === 'number' && !isNaN(o.rate) ? o.rate : 0.25;
+      const days = o.days && typeof o.days === 'object' && !Array.isArray(o.days) ? o.days : {};
+      var tasks;
+      if (Array.isArray(o.tasks)) tasks = normalizeTasks(o.tasks);
+      else tasks = cloneTasks(DEFAULT_TASKS_ALL);
+      return { rate: rate, days: days, tasks: tasks };
+    } catch (e) {
+      return empty;
+    }
+  }
+
+  function persist() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        rate: state.rate,
+        days: state.days,
+        tasks: state.tasks
+      }));
+    } catch (e) { /* quota / private mode */ }
+  }
+
+  function calcMonthlyMax(tasks) {
+    // Mantém o mesmo valor inicial do projeto quando o banco estiver "igual ao padrão",
+    // mas recalcula automaticamente quando você editar/remover/adicionar tarefas.
+    var OLD_DAILY_MAX = 15 + 15 + 20 + 10 + 10 + 20 + 15 + 20 + 15 + 30;
+    var OLD_WEEKLY_MAX = 25 + 25 + 15 + 30;
+    var OLD_BONUS_MAX = 50 + 100 + 200;
+    var OLD_TOTAL_MONTHLY = (OLD_DAILY_MAX * 22) + (OLD_WEEKLY_MAX * 4) + OLD_BONUS_MAX;
+
+    function isDefaultTasks(current) {
+      if (!Array.isArray(current)) return false;
+      if (current.length !== DEFAULT_TASKS_ALL.length) return false;
+      var byId = {};
+      current.forEach(function (t) { byId[t.id] = t; });
+      for (var i = 0; i < DEFAULT_TASKS_ALL.length; i++) {
+        var d = DEFAULT_TASKS_ALL[i];
+        var t = byId[d.id];
+        if (!t) return false;
+        if (String(t.freq) !== String(d.freq)) return false;
+        if (String(t.section) !== String(d.section)) return false;
+        if (parseInt(t.pts, 10) !== parseInt(d.pts, 10)) return false;
+      }
+      return true;
+    }
+
+    if (isDefaultTasks(tasks)) return OLD_TOTAL_MONTHLY;
+
+    var mult = { 'diário': 22, 'semanal': 4, 'mensal': 1 };
+    var total = 0;
+    tasks.forEach(function (t) {
+      var p = Math.max(0, parseInt(t.pts, 10) || 0);
+      var m = mult[t.freq] || 1;
+      total += p * m;
+    });
+    return total;
+  }
+
+  function pruneDayTaskIds() {
+    var valid = {};
+    state.tasks.forEach(function (t) { valid[t.id] = 1; });
+    Object.keys(state.days).forEach(function (d) {
+      var arr = state.days[d];
+      if (!Array.isArray(arr)) return;
+      var f = arr.filter(function (id) { return valid[id]; });
+      if (f.length === 0) delete state.days[d];
+      else if (f.length !== arr.length) state.days[d] = f;
+    });
+  }
+
+  const state = loadState();
+  let selectedDateStr;
+  let viewYear;
+  let viewMonth;
+
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n);
+  }
+
+  function localDateKey(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function parseISODate(str) {
+    const p = str.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2]);
+  }
+
+  function formatDisplayDate(str) {
+    return new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(parseISODate(str));
+  }
+
+  function monthLabel(y, m) {
+    return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(y, m, 1));
+  }
+
+  function collectDoneIds() {
+    const ids = [];
+    document.querySelectorAll('.task-row').forEach(row => {
+      if (row.classList.contains('done')) ids.push(row.dataset.taskId);
+    });
+    return ids;
+  }
+
+  function saveCurrentDay() {
+    const ids = collectDoneIds();
+    if (ids.length === 0) delete state.days[selectedDateStr];
+    else state.days[selectedDateStr] = ids;
+    persist();
+  }
+
+  function applyDayState(dateStr) {
+    const raw = state.days[dateStr];
+    const ids = new Set(Array.isArray(raw) ? raw : []);
+    document.querySelectorAll('.task-row').forEach(function (row) {
+      const on = ids.has(row.dataset.taskId);
+      row.classList.toggle('done', on);
+      const main = row.querySelector('.task-row-main');
+      if (main) main.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    updateSummary();
+    refreshDateLabel();
+  }
+
+  function refreshDateLabel() {
+    const today = localDateKey(new Date());
+    document.getElementById('metric-day-label').textContent =
+      selectedDateStr === today ? 'Pontos hoje' : 'Pontos neste dia';
+    document.getElementById('selected-date-display').innerHTML =
+      'A editar: <strong>' + formatDisplayDate(selectedDateStr) + '</strong>';
+  }
+
+  function dayCompletionStats(dateStr) {
+    const valid = {};
+    state.tasks.forEach(function (t) { valid[t.id] = 1; });
+    const raw = state.days[dateStr];
+    const done = Array.isArray(raw) ? raw.filter(function (id) { return valid[id]; }).length : 0;
+    const total = state.tasks.length;
+    return { done: done, total: total };
+  }
+
+  function renderCalendar() {
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+    document.getElementById('cal-month-label').textContent = monthLabel(viewYear, viewMonth);
+
+    const first = new Date(viewYear, viewMonth, 1);
+    const lastDay = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const startPad = (first.getDay() + 6) % 7;
+
+    for (let i = 0; i < startPad; i++) {
+      const pad = document.createElement('div');
+      pad.className = 'cal-cell cal-cell--pad';
+      pad.setAttribute('aria-hidden', 'true');
+      grid.appendChild(pad);
+    }
+
+    const today = localDateKey(new Date());
+
+    for (let d = 1; d <= lastDay; d++) {
+      const key = viewYear + '-' + pad2(viewMonth + 1) + '-' + pad2(d);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cal-cell';
+      btn.textContent = String(d);
+      btn.dataset.date = key;
+
+      if (key === today) btn.classList.add('cal-cell--today');
+      if (key === selectedDateStr) btn.classList.add('cal-cell--selected');
+
+      const stats = dayCompletionStats(key);
+      if (stats.total > 0 && stats.done === stats.total) btn.classList.add('cal-cell--full');
+      else if (stats.done > 0) btn.classList.add('cal-cell--haspts');
+
+      btn.addEventListener('click', function () {
+        viewYear = parseInt(key.slice(0, 4), 10);
+        viewMonth = parseInt(key.slice(5, 7), 10) - 1;
+        selectDate(key);
+      });
+
+      grid.appendChild(btn);
+    }
+
+    while (grid.children.length % 7 !== 0) {
+      const pad = document.createElement('div');
+      pad.className = 'cal-cell cal-cell--pad';
+      pad.setAttribute('aria-hidden', 'true');
+      grid.appendChild(pad);
+    }
+  }
+
+  function selectDate(dateStr) {
+    if (dateStr === selectedDateStr) {
+      renderCalendar();
+      return;
+    }
+    saveCurrentDay();
+    selectedDateStr = dateStr;
+    applyDayState(selectedDateStr);
+    renderCalendar();
+  }
+
+  function updateSummary() {
+    let pts = 0;
+    let possible = 0;
+    document.querySelectorAll('.task-row').forEach(function (row) {
+      const p = parseInt(row.dataset.pts, 10);
+      possible += p;
+      if (row.classList.contains('done')) pts += p;
+    });
+    document.getElementById('pts-hoje').textContent = pts;
+    document.getElementById('pts-max').textContent = possible;
+    const rate = parseFloat(document.getElementById('rate-input').value) || 0.25;
+    const monthlyPts = calcMonthlyMax(state.tasks);
+    const monthly = Math.round(monthlyPts * rate);
+    document.getElementById('ganho-max').textContent = 'R$' + monthly;
+  }
+
+  function buildTaskRow(task) {
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    row.dataset.taskId = task.id;
+    row.dataset.pts = String(task.pts);
+    row.dataset.freq = task.freq;
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'task-row-main';
+    main.setAttribute('aria-pressed', 'false');
+
+    const check = document.createElement('div');
+    check.className = 'task-check';
+    const mark = document.createElement('span');
+    mark.className = 'checkmark';
+    mark.textContent = '✓';
+    check.appendChild(mark);
+
+    const name = document.createElement('span');
+    name.className = 'task-name';
+    name.textContent = task.name;
+
+    const freq = document.createElement('span');
+    freq.className = 'task-freq';
+    freq.textContent = task.freq;
+
+    const ptsLabel = document.createElement('span');
+    ptsLabel.className = 'task-pts';
+    ptsLabel.textContent = '+' + task.pts + ' pts';
+
+    main.appendChild(check);
+    main.appendChild(name);
+    main.appendChild(freq);
+    main.appendChild(ptsLabel);
+
+    row.appendChild(main);
+    return row;
+  }
+
+  function renderTasks() {
+    const mount = document.getElementById('tasks-mount');
+    mount.innerHTML = '';
+    const bySection = {};
+    state.tasks.forEach(function (t) {
+      if (!bySection[t.section]) bySection[t.section] = [];
+      bySection[t.section].push(t);
+    });
+    SECTION_META.forEach(function (sec) {
+      const list = bySection[sec.key];
+      if (!list || list.length === 0) return;
+      const title = document.createElement('div');
+      title.className = 'section-title ' + sec.titleClass;
+      title.textContent = sec.label;
+      mount.appendChild(title);
+      const card = document.createElement('div');
+      card.className = 'task-card';
+      list.forEach(function (task, idx) {
+        if (idx > 0) {
+          const div = document.createElement('div');
+          div.className = 'divider';
+          card.appendChild(div);
+        }
+        card.appendChild(buildTaskRow(task));
+      });
+      mount.appendChild(card);
+    });
+  }
+
+  function syncPtsFromInput(input) {
+    const id = input.dataset.taskId;
+    let v = parseInt(input.value, 10);
+    if (!v || v < 1) v = 1;
+    if (v > 999) v = 999;
+    const t = state.tasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    t.pts = v;
+    input.value = String(v);
+    const row = input.closest('.task-row');
+    if (row) {
+      row.dataset.pts = String(v);
+      const label = row.querySelector('.task-pts');
+      if (label) label.textContent = '+' + v + ' pts';
+    }
+    persist();
+    updateSummary();
+    renderCalendar();
+  }
+
+  function removeTask(id) {
+    const idx = state.tasks.findIndex(function (t) { return t.id === id; });
+    if (idx === -1) return;
+    state.tasks.splice(idx, 1);
+    pruneDayTaskIds();
+    persist();
+    renderTasks();
+    applyDayState(selectedDateStr);
+    renderCalendar();
+  }
+
+  function fillSectionSelect() {
+    const sel = document.getElementById('add-task-section');
+    sel.innerHTML = '';
+    SECTION_META.forEach(function (sec) {
+      const opt = document.createElement('option');
+      opt.value = sec.key;
+      opt.textContent = sec.label;
+      sel.appendChild(opt);
+    });
+  }
+
+  function toggle(row) {
+    row.classList.toggle('done');
+    const main = row.querySelector('.task-row-main');
+    if (main) main.setAttribute('aria-pressed', row.classList.contains('done') ? 'true' : 'false');
+    updateSummary();
+    saveCurrentDay();
+    renderCalendar();
+  }
+
+  function resetAll() {
+    document.querySelectorAll('.task-row').forEach(function (r) {
+      r.classList.remove('done');
+      const m = r.querySelector('.task-row-main');
+      if (m) m.setAttribute('aria-pressed', 'false');
+    });
+    updateSummary();
+    saveCurrentDay();
+    renderCalendar();
+  }
+
+  document.getElementById('rate-input').addEventListener('input', function () {
+    state.rate = parseFloat(this.value) || 0.25;
+    persist();
+    updateSummary();
+  });
+
+  document.getElementById('cal-prev').addEventListener('click', function () {
+    viewMonth -= 1;
+    if (viewMonth < 0) {
+      viewMonth = 11;
+      viewYear -= 1;
+    }
+    renderCalendar();
+  });
+
+  document.getElementById('cal-next').addEventListener('click', function () {
+    viewMonth += 1;
+    if (viewMonth > 11) {
+      viewMonth = 0;
+      viewYear += 1;
+    }
+    renderCalendar();
+  });
+
+  document.getElementById('cal-today').addEventListener('click', function () {
+    const t = new Date();
+    viewYear = t.getFullYear();
+    viewMonth = t.getMonth();
+    selectDate(localDateKey(t));
+  });
+
+  window.addEventListener('beforeunload', saveCurrentDay);
+
+  document.getElementById('tasks-mount').addEventListener('click', function (e) {
+    const main = e.target.closest('.task-row-main');
+    if (main && this.contains(main)) {
+      const row = main.closest('.task-row');
+      if (row) toggle(row);
+    }
+  });
+
+  (function init() {
+    const now = new Date();
+    selectedDateStr = localDateKey(now);
+    viewYear = now.getFullYear();
+    viewMonth = now.getMonth();
+    pruneDayTaskIds();
+    renderTasks();
+    document.getElementById('rate-input').value = String(state.rate);
+    applyDayState(selectedDateStr);
+    renderCalendar();
+  })();
+  </script>
+</body>
+</html>

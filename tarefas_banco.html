@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banco de tarefas</title>
+  <link rel="stylesheet" href="sistema_de_pontos_rotina.css">
+  <link rel="icon" href="icon.png" type="image/png">
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">Banco de tarefas</h1>
+      <p class="page-lead">
+        Edite, atualize e exclua tarefas. A página inicial só serve para marcar as tarefas do dia.
+      </p>
+      <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <a class="reset-btn" href="sistema_de_pontos_rotina.html" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
+          Voltar para a página inicial
+        </a>
+      </div>
+    </header>
+
+    <section class="add-task-card" aria-label="Adicionar tarefa">
+      <h2 class="add-task-title">Adicionar tarefa</h2>
+      <form class="add-task-grid" id="add-task-form" autocomplete="off">
+        <div class="add-task-field add-task-field--wide">
+          <label for="add-task-name">Nome</label>
+          <input type="text" id="add-task-name" required maxlength="120" placeholder="Ex.: Meditar 10 min">
+        </div>
+        <div class="add-task-field">
+          <label for="add-task-pts">Pontos</label>
+          <input type="number" id="add-task-pts" value="10" min="1" max="999" step="1" required>
+        </div>
+        <div class="add-task-field">
+          <label for="add-task-freq">Frequência</label>
+          <select id="add-task-freq">
+            <option value="diário">Diário</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensal">Mensal</option>
+          </select>
+        </div>
+        <div class="add-task-field">
+          <label for="add-task-section">Área</label>
+          <select id="add-task-section"></select>
+        </div>
+        <div class="add-task-field add-task-field--wide">
+          <button type="submit" class="add-task-submit">Adicionar</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="admin-mount"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'sistemaPontosRotina_v2';
+    const STORAGE_KEY_V1 = 'sistemaPontosRotina_v1';
+
+    const SECTION_META = [
+      { key: 'saude', label: 'Saúde & corpo', titleClass: 'section-title--tight section-title--saude' },
+      { key: 'casa', label: 'Casa', titleClass: 'section-title--casa' },
+      { key: 'estudo', label: 'Estudo & leitura', titleClass: 'section-title--estudo' },
+      { key: 'cel', label: 'Controle do celular', titleClass: 'section-title--cel' },
+      { key: 'bonus', label: 'Bônus de consistência', titleClass: 'section-title--bonus' }
+    ];
+
+    const DEFAULT_TASKS_ALL = [
+      { id: 't01', name: 'Passeio com a Cacau – manhã', pts: 15, freq: 'diário', section: 'saude' },
+      { id: 't02', name: 'Passeio com a Cacau – tarde', pts: 15, freq: 'diário', section: 'saude' },
+      { id: 't03', name: 'Treinar (academia)', pts: 20, freq: 'diário', section: 'saude' },
+      { id: 't04', name: 'Dormir até meia-noite', pts: 10, freq: 'diário', section: 'saude' },
+      { id: 't05', name: 'Tomar água (mínimo 2L)', pts: 10, freq: 'diário', section: 'saude' },
+      { id: 't06', name: 'Banhar a Cacau', pts: 25, freq: 'semanal', section: 'saude' },
+      { id: 't07', name: 'Lavar a louça', pts: 15, freq: 'diário', section: 'casa' },
+      { id: 't08', name: 'Varrer a casa', pts: 20, freq: 'diário', section: 'casa' },
+      { id: 't09', name: 'Lavar roupa', pts: 25, freq: 'semanal', section: 'casa' },
+      { id: 't10', name: 'Organizar quarto / espaço pessoal', pts: 15, freq: 'semanal', section: 'casa' },
+      { id: 't11', name: 'Ler 1 capítulo + resumo escrito', pts: 20, freq: 'diário', section: 'estudo' },
+      { id: 't12', name: 'Ler artigo científico + resumo', pts: 30, freq: 'semanal', section: 'estudo' },
+      { id: 't13', name: 'Estudar / praticar algo por 30 min', pts: 15, freq: 'diário', section: 'estudo' },
+      { id: 't14', name: 'Nenhum celular na 1ª hora do dia', pts: 20, freq: 'diário', section: 'cel' },
+      { id: 't15', name: 'Celular fora do quarto após 22h', pts: 20, freq: 'diário', section: 'cel' },
+      { id: 't16', name: 'Máx. 2h de redes sociais (screentime)', pts: 15, freq: 'diário', section: 'cel' },
+      { id: 't17', name: 'Completar todas as tarefas diárias por 3 dias seguidos', pts: 50, freq: 'semanal', section: 'bonus' },
+      { id: 't18', name: 'Semana perfeita (todas as tarefas em 7 dias)', pts: 100, freq: 'mensal', section: 'bonus' },
+      { id: 't19', name: 'Melhor mês (superar pontuação do mês anterior)', pts: 200, freq: 'mensal', section: 'bonus' }
+    ];
+
+    function cloneTasks(arr) {
+      return JSON.parse(JSON.stringify(arr));
+    }
+
+    function newTaskId() {
+      return 't_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function normalizeTasks(arr) {
+      const allowedFreq = { 'diário': 1, 'semanal': 1, 'mensal': 1 };
+      const allowedSec = { saude: 1, casa: 1, estudo: 1, cel: 1, bonus: 1 };
+      const out = [];
+      const seen = {};
+      (Array.isArray(arr) ? arr : []).forEach(function (t) {
+        let id = String(t.id || '').trim();
+        if (!id) id = newTaskId();
+        while (seen[id]) id = newTaskId();
+        seen[id] = 1;
+        const section = allowedSec[t.section] ? t.section : 'saude';
+        const freq = allowedFreq[t.freq] ? t.freq : 'diário';
+        let pts = parseInt(t.pts, 10);
+        if (!pts || pts < 1) pts = 1;
+        if (pts > 999) pts = 999;
+        let name = String(t.name || '').trim();
+        if (!name) name = 'Tarefa';
+        out.push({ id: id, name: name, pts: pts, freq: freq, section: section });
+      });
+      return out;
+    }
+
+    function loadState() {
+      const empty = { rate: 0.25, days: {}, tasks: cloneTasks(DEFAULT_TASKS_ALL) };
+      try {
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          const oldRaw = localStorage.getItem(STORAGE_KEY_V1);
+          if (oldRaw) {
+            const o = JSON.parse(oldRaw);
+            const rate = typeof o.rate === 'number' && !isNaN(o.rate) ? o.rate : 0.25;
+            const days = o.days && typeof o.days === 'object' && !Array.isArray(o.days) ? o.days : {};
+            const migrated = { rate: rate, days: days, tasks: cloneTasks(DEFAULT_TASKS_ALL) };
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch (e2) { /* ignore */ }
+            return migrated;
+          }
+          return empty;
+        }
+
+        const o = JSON.parse(raw);
+        const rate = typeof o.rate === 'number' && !isNaN(o.rate) ? o.rate : 0.25;
+        const days = o.days && typeof o.days === 'object' && !Array.isArray(o.days) ? o.days : {};
+        var tasks;
+        if (Array.isArray(o.tasks)) tasks = normalizeTasks(o.tasks);
+        else tasks = cloneTasks(DEFAULT_TASKS_ALL);
+        return { rate: rate, days: days, tasks: tasks };
+      } catch (e) {
+        return empty;
+      }
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          rate: state.rate,
+          days: state.days,
+          tasks: state.tasks
+        }));
+      } catch (e) { /* quota / private mode */ }
+    }
+
+    function pruneDayTaskIds() {
+      var valid = {};
+      state.tasks.forEach(function (t) { valid[t.id] = 1; });
+      Object.keys(state.days).forEach(function (d) {
+        var arr = state.days[d];
+        if (!Array.isArray(arr)) return;
+        var f = arr.filter(function (id) { return valid[id]; });
+        if (f.length === 0) delete state.days[d];
+        else if (f.length !== arr.length) state.days[d] = f;
+      });
+    }
+
+    function fillSectionSelect() {
+      const sel = document.getElementById('add-task-section');
+      sel.innerHTML = '';
+      SECTION_META.forEach(function (sec) {
+        const opt = document.createElement('option');
+        opt.value = sec.key;
+        opt.textContent = sec.label;
+        sel.appendChild(opt);
+      });
+    }
+
+    function renderTasks() {
+      const mount = document.getElementById('admin-mount');
+      mount.innerHTML = '';
+      const bySection = {};
+      state.tasks.forEach(function (t) {
+        if (!bySection[t.section]) bySection[t.section] = [];
+        bySection[t.section].push(t);
+      });
+
+      SECTION_META.forEach(function (sec) {
+        const list = bySection[sec.key];
+        if (!list || list.length === 0) return;
+
+        const title = document.createElement('div');
+        title.className = 'section-title ' + sec.titleClass;
+        title.textContent = sec.label;
+        mount.appendChild(title);
+
+        const card = document.createElement('div');
+        card.className = 'task-card';
+
+        list.forEach(function (task, idx) {
+          if (idx > 0) {
+            const div = document.createElement('div');
+            div.className = 'divider';
+            card.appendChild(div);
+          }
+
+          const row = document.createElement('div');
+          row.className = 'admin-task-row';
+          row.dataset.taskId = task.id;
+
+          row.innerHTML = '' +
+            '<input class="admin-task-input admin-task-input--name" type="text" maxlength="120" value="' + escapeHtml(task.name) + '" aria-label="Nome">' +
+            '<input class="admin-task-input admin-task-input--pts" type="number" min="1" max="999" step="1" value="' + String(task.pts) + '" aria-label="Pontos">' +
+            buildFreqSelect(task.freq) +
+            buildSectionSelect(task.section) +
+            '<button type="button" class="admin-task-save">Salvar</button>' +
+            '<button type="button" class="admin-task-del">Excluir</button>';
+
+          card.appendChild(row);
+        });
+
+        mount.appendChild(card);
+      });
+    }
+
+    function buildFreqSelect(selected) {
+      const daily = selected === 'diário' ? 'selected' : '';
+      const weekly = selected === 'semanal' ? 'selected' : '';
+      const monthly = selected === 'mensal' ? 'selected' : '';
+      return '' +
+        '<select class="admin-task-input admin-task-input--freq" aria-label="Frequência">' +
+          '<option value="diário" ' + daily + '>Diário</option>' +
+          '<option value="semanal" ' + weekly + '>Semanal</option>' +
+          '<option value="mensal" ' + monthly + '>Mensal</option>' +
+        '</select>';
+    }
+
+    function buildSectionSelect(selected) {
+      var opts = '';
+      SECTION_META.forEach(function (sec) {
+        const s = selected === sec.key ? 'selected' : '';
+        opts += '<option value="' + sec.key + '" ' + s + '>' + escapeHtml(sec.label) + '</option>';
+      });
+      return '' +
+        '<select class="admin-task-input admin-task-input--section" aria-label="Área">' +
+          opts +
+        '</select>';
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function readRowValues(row) {
+      const id = row.dataset.taskId;
+      const nameEl = row.querySelector('.admin-task-input--name');
+      const ptsEl = row.querySelector('.admin-task-input--pts');
+      const freqEl = row.querySelector('.admin-task-input--freq');
+      const secEl = row.querySelector('.admin-task-input--section');
+
+      let name = (nameEl.value || '').trim();
+      if (!name) name = 'Tarefa';
+
+      let pts = parseInt(ptsEl.value, 10);
+      if (!pts || pts < 1) pts = 1;
+      if (pts > 999) pts = 999;
+
+      const freq = freqEl.value || 'diário';
+      const section = secEl.value || 'saude';
+
+      return { id: id, name: name, pts: pts, freq: freq, section: section };
+    }
+
+    document.getElementById('admin-mount').addEventListener('click', function (e) {
+      const saveBtn = e.target.closest('.admin-task-save');
+      const delBtn = e.target.closest('.admin-task-del');
+
+      const row = e.target.closest('.admin-task-row');
+      if (!row) return;
+
+      if (delBtn) {
+        e.preventDefault();
+        var id = row.dataset.taskId;
+        if (!confirm('Excluir esta tarefa?')) return;
+        const idx = state.tasks.findIndex(function (t) { return t.id === id; });
+        if (idx !== -1) state.tasks.splice(idx, 1);
+        pruneDayTaskIds();
+        persist();
+        renderTasks();
+        return;
+      }
+
+      if (saveBtn) {
+        e.preventDefault();
+        var values = readRowValues(row);
+        const t = state.tasks.find(function (x) { return x.id === values.id; });
+        if (!t) return;
+        t.name = values.name;
+        t.pts = values.pts;
+        t.freq = values.freq;
+        t.section = values.section;
+        persist();
+        pruneDayTaskIds();
+        renderTasks();
+      }
+    });
+
+    document.getElementById('add-task-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const nameEl = document.getElementById('add-task-name');
+      const ptsEl = document.getElementById('add-task-pts');
+      const freqEl = document.getElementById('add-task-freq');
+      const secEl = document.getElementById('add-task-section');
+
+      let pts = parseInt(ptsEl.value, 10);
+      if (!pts || pts < 1) pts = 1;
+      if (pts > 999) pts = 999;
+
+      const name = (nameEl.value || '').trim() || 'Tarefa';
+      const freq = freqEl.value || 'diário';
+      const section = secEl.value || 'saude';
+
+      state.tasks.push({
+        id: newTaskId(),
+        name: name,
+        pts: pts,
+        freq: freq,
+        section: section
+      });
+
+      nameEl.value = '';
+      ptsEl.value = '10';
+      persist();
+      renderTasks();
+    });
+
+    const state = loadState();
+    fillSectionSelect();
+    pruneDayTaskIds();
+    renderTasks();
+  </script>
+</body>
+</html>
+
