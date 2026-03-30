@@ -347,6 +347,56 @@
     pruneDayTaskIds();
     renderTasks();
   </script>
-</body>
+  </script>
+
+  <!-- Firebase (opcional) - adicione suas credenciais no objeto firebaseConfig -->
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+  <script>
+    (function () {
+      if (typeof firebase === 'undefined') return;
+      try {
+        const firebaseConfig = {
+          databaseURL: "https://pontos-rotina-default-rtdb.firebaseio.com/",
+          // adicione aqui sua apiKey, authDomain, projectId, etc.
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let __writing = false;
+
+        function saveRemote() {
+          if (!database) return;
+          __writing = true;
+          database.ref(STORAGE_KEY).set({ rate: state.rate, days: state.days, tasks: state.tasks })
+            .catch(function (e) { console.error('Firebase write error', e); })
+            .finally(function () { setTimeout(function () { __writing = false; }, 300); });
+        }
+
+        if (typeof persist === 'function') {
+          const _orig = persist;
+          persist = function () { _orig(); try { saveRemote(); } catch (e) { console.warn('saveRemote failed', e); } };
+        }
+
+        database.ref(STORAGE_KEY).on('value', function (snap) {
+          try {
+            if (__writing) return;
+            const remote = snap.val();
+            if (!remote) return;
+            const localRaw = JSON.stringify({ rate: state.rate, days: state.days, tasks: state.tasks });
+            const remoteRaw = JSON.stringify(remote);
+            if (localRaw === remoteRaw) return;
+            state.rate = typeof remote.rate === 'number' ? remote.rate : state.rate;
+            state.days = remote.days && typeof remote.days === 'object' ? remote.days : {};
+            if (Array.isArray(remote.tasks)) state.tasks = remote.tasks;
+
+            try { renderTasks(); } catch (e) {}
+            try { persist(); } catch (e) {}
+          } catch (e) { console.error(e); }
+        });
+      } catch (e) { console.warn('Firebase init failed', e); }
+    })();
+  </script>
+
+  </body>
 </html>
 
