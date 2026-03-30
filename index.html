@@ -27,6 +27,20 @@
         </div>
         <div class="calendar-grid" id="cal-grid"></div>
         <p class="calendar-selected" id="selected-date-display"></p>
+
+        <div class="monthly-board">
+          <div class="monthly-board-title">Ganhos do mês</div>
+          <div class="monthly-board-grid">
+            <div class="monthly-stat">
+              <div class="monthly-stat-label">Pontos acumulados</div>
+              <div class="monthly-stat-value" id="monthly-pts">0</div>
+            </div>
+            <div class="monthly-stat">
+              <div class="monthly-stat-label">Valor acumulado</div>
+              <div class="monthly-stat-value monthly-stat-value--accent" id="monthly-valor">R$0</div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <div class="summary-grid">
@@ -56,10 +70,6 @@
 
       <div id="tasks-mount"></div>
 
-      <div class="ask-actions">
-        <button type="button" class="ask-btn" onclick="sendPrompt('Como funciona o sistema de bônus de consistência na prática? Me dá exemplos.')">Como funciona o bônus de consistência na prática? ↗</button>
-        <button type="button" class="ask-btn" onclick="sendPrompt('Quais estratégias eu e minha irmã podemos usar para tornar esse sistema ainda mais efetivo para TDAH e TEA?')">Estratégias para minha irmã aplicar junto comigo ↗</button>
-      </div>
     </main>
   </div>
 
@@ -297,6 +307,31 @@
     return { done: done, total: total };
   }
 
+  function calcMonthlyEarnings(year, month) {
+    // Calcula os pontos acumulados no mês especificado
+    const taskMap = {};
+    state.tasks.forEach(function (t) { taskMap[t.id] = t; });
+
+    let totalPts = 0;
+    const firstDay = 1;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+
+    for (let d = firstDay; d <= lastDay; d++) {
+      const key = year + '-' + pad2(month + 1) + '-' + pad2(d);
+      const raw = state.days[key];
+      if (Array.isArray(raw)) {
+        raw.forEach(function (taskId) {
+          const task = taskMap[taskId];
+          if (task) {
+            totalPts += parseInt(task.pts, 10);
+          }
+        });
+      }
+    }
+
+    return totalPts;
+  }
+
   function renderCalendar() {
     const grid = document.getElementById('cal-grid');
     grid.innerHTML = '';
@@ -372,6 +407,12 @@
     const monthlyPts = calcMonthlyMax(state.tasks);
     const monthly = Math.round(monthlyPts * rate);
     document.getElementById('ganho-max').textContent = 'R$' + monthly;
+
+    // Atualiza o board mensal
+    const monthlyEarned = calcMonthlyEarnings(viewYear, viewMonth);
+    const monthlyValue = Math.round(monthlyEarned * rate);
+    document.getElementById('monthly-pts').textContent = monthlyEarned;
+    document.getElementById('monthly-valor').textContent = 'R$' + monthlyValue;
   }
 
   function buildTaskRow(task) {
@@ -518,6 +559,7 @@
       viewYear -= 1;
     }
     renderCalendar();
+    updateSummary();
   });
 
   document.getElementById('cal-next').addEventListener('click', function () {
@@ -527,6 +569,7 @@
       viewYear += 1;
     }
     renderCalendar();
+    updateSummary();
   });
 
   document.getElementById('cal-today').addEventListener('click', function () {

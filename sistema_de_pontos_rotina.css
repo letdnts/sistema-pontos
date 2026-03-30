@@ -209,6 +209,90 @@ body {
   margin-top: 2px;
 }
 
+/* ── Board mensal ── */
+.monthly-board {
+  background: var(--bg-card-alt);
+  border: 0.5px solid var(--rosa-medio);
+  border-radius: var(--border-radius-lg);
+  padding: 16px;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+.monthly-board-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vinho);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--rosa-medio);
+}
+
+.monthly-board-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.monthly-stat {
+  background: var(--bege);
+  border: 0.5px solid var(--bege-rosado);
+  border-radius: var(--border-radius-md);
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.monthly-stat-label {
+  font-size: 11px;
+  color: var(--rosa-escuro);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.monthly-stat-value {
+  font-family: 'DM Serif Display', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--vinho);
+  letter-spacing: -0.02em;
+}
+
+.monthly-stat-value--accent {
+  color: var(--terracota);
+}
+
+@media (max-width: 640px) {
+  .monthly-board {
+    padding: 14px;
+    margin-bottom: 0.65rem;
+  }
+
+  .monthly-board-title {
+    font-size: 12px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+  }
+
+  .monthly-board-grid {
+    gap: 10px;
+  }
+
+  .monthly-stat {
+    padding: 10px 12px;
+  }
+
+  .monthly-stat-label {
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+
+  .monthly-stat-value {
+    font-size: 20px;
+  }
+}
+
 .metric-input-wrap {
   display: flex;
   align-items: center;
