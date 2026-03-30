@@ -5,8 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sistema de pontos – rotina</title>
-<link rel="stylesheet" href="sistema_de_pontos_rotina.css">  
-<link rel="icon" href="icon.png" type="image/png">
+  <link rel="stylesheet" href="sistema_de_pontos_rotina.css">
+  <link rel="icon" href="icon.png" type="image/png">
 </head>
 
 <body>
@@ -186,37 +186,17 @@
       } catch (e) { /* quota / private mode */ }
     }
 
-    function calcMonthlyMax(tasks) {
-      // Mantém o mesmo valor inicial do projeto quando o banco estiver "igual ao padrão",
-      // mas recalcula automaticamente quando você editar/remover/adicionar tarefas.
-      var OLD_DAILY_MAX = 15 + 15 + 20 + 10 + 10 + 20 + 15 + 20 + 15 + 30;
-      var OLD_WEEKLY_MAX = 25 + 25 + 15 + 30;
-      var OLD_BONUS_MAX = 50 + 100 + 200;
-      var OLD_TOTAL_MONTHLY = (OLD_DAILY_MAX * 22) + (OLD_WEEKLY_MAX * 4) + OLD_BONUS_MAX;
+    function calcMonthlyMax(tasks, year, month) {
+      // Pega a quantidade exata de dias do mês que você está visualizando (ex: 31, 30, 28)
+      const lastDay = new Date(year, month + 1, 0).getDate();
 
-      function isDefaultTasks(current) {
-        if (!Array.isArray(current)) return false;
-        if (current.length !== DEFAULT_TASKS_ALL.length) return false;
-        var byId = {};
-        current.forEach(function (t) { byId[t.id] = t; });
-        for (var i = 0; i < DEFAULT_TASKS_ALL.length; i++) {
-          var d = DEFAULT_TASKS_ALL[i];
-          var t = byId[d.id];
-          if (!t) return false;
-          if (String(t.freq) !== String(d.freq)) return false;
-          if (String(t.section) !== String(d.section)) return false;
-          if (parseInt(t.pts, 10) !== parseInt(d.pts, 10)) return false;
-        }
-        return true;
-      }
-
-      if (isDefaultTasks(tasks)) return OLD_TOTAL_MONTHLY;
-
-      var mult = { 'diário': 22, 'semanal': 4, 'mensal': 1 };
-      var total = 0;
+      let total = 0;
       tasks.forEach(function (t) {
-        var p = Math.max(0, parseInt(t.pts, 10) || 0);
-        var m = mult[t.freq] || 1;
+        const p = Math.max(0, parseInt(t.pts, 10) || 0);
+        let m = 1;
+        if (t.freq === 'diário') m = lastDay; // Multiplica pelos dias reais do mês
+        else if (t.freq === 'semanal') m = 4; // Considera 4 semanas
+        else if (t.freq === 'mensal') m = 1;
         total += p * m;
       });
       return total;
@@ -311,13 +291,20 @@
     }
 
     function calcMonthlyEarnings(year, month) {
-      // Calcula os pontos acumulados no mês especificado
+      // Calcula os pontos acumulados no mês especificado (aceita decimais)
       const taskMap = {};
       state.tasks.forEach(function (t) { taskMap[t.id] = t; });
 
       let totalPts = 0;
       const firstDay = 1;
-      const lastDay = new Date(year, month + 1, 0).getDate();
+      const lastDayFull = new Date(year, month + 1, 0).getDate();
+
+      // Se estivermos visualizando o mês/ano atual, não conte dias futuros
+      let lastDay = lastDayFull;
+      const now = new Date();
+      if (year === now.getFullYear() && month === now.getMonth()) {
+        lastDay = Math.min(lastDayFull, now.getDate());
+      }
 
       for (let d = firstDay; d <= lastDay; d++) {
         const key = year + '-' + pad2(month + 1) + '-' + pad2(d);
@@ -326,13 +313,15 @@
           raw.forEach(function (taskId) {
             const task = taskMap[taskId];
             if (task) {
-              totalPts += parseInt(task.pts, 10);
+              const p = parseFloat(task.pts);
+              totalPts += isNaN(p) ? 0 : p;
             }
           });
         }
       }
 
-      return totalPts;
+      // Limita a até 2 casas decimais sem forçar zeros desnecessários
+      return Number(totalPts.toFixed(2));
     }
 
     function renderCalendar() {
@@ -399,23 +388,46 @@
     function updateSummary() {
       let pts = 0;
       let possible = 0;
+
       document.querySelectorAll('.task-row').forEach(function (row) {
         const p = parseInt(row.dataset.pts, 10);
-        possible += p;
-        if (row.classList.contains('done')) pts += p;
+        const freq = row.dataset.freq;
+        const isDone = row.classList.contains('done');
+
+        if (isDone) pts += p;
+
+        // A meta possível do dia considera apenas as tarefas "diárias",
+        // mas se você concluiu uma semanal/mensal hoje, ela passa a somar na meta.
+        if (freq === 'diário' || isDone) {
+          possible += p;
+        }
       });
+
       document.getElementById('pts-hoje').textContent = pts;
       document.getElementById('pts-max').textContent = possible;
-      const rate = parseFloat(document.getElementById('rate-input').value) || 0.25;
-      const monthlyPts = calcMonthlyMax(state.tasks);
-      const monthly = Math.round(monthlyPts * rate);
-      document.getElementById('ganho-max').textContent = 'R$' + monthly;
 
-      // Atualiza o board mensal
+      const rate = parseFloat(document.getElementById('rate-input').value) || 0.25;
+
+      // Usa o Intl para garantir que tudo fique no formato R$ 0,00 padrão Brasil
+      const brlFormatter = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL', maximumFractionDigits: 2
+      });
+
+      // --- MÁXIMO MENSAL (Projeção) ---
+      const monthlyPtsMax = calcMonthlyMax(state.tasks, viewYear, viewMonth);
+      const monthlyValueMax = monthlyPtsMax * rate;
+      document.getElementById('ganho-max').textContent = brlFormatter.format(monthlyValueMax);
+
+      // --- ACUMULADO (Ganhos do mês) ---
       const monthlyEarned = calcMonthlyEarnings(viewYear, viewMonth);
-      const monthlyValue = Math.round(monthlyEarned * rate);
-      document.getElementById('monthly-pts').textContent = monthlyEarned;
-      document.getElementById('monthly-valor').textContent = 'R$' + monthlyValue;
+      const monthlyValue = monthlyEarned * rate;
+
+      document.getElementById('monthly-pts').textContent =
+        (typeof monthlyEarned === 'number')
+          ? monthlyEarned.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+          : String(monthlyEarned);
+
+      document.getElementById('monthly-valor').textContent = brlFormatter.format(monthlyValue);
     }
 
     function buildTaskRow(task) {
@@ -533,8 +545,11 @@
       row.classList.toggle('done');
       const main = row.querySelector('.task-row-main');
       if (main) main.setAttribute('aria-pressed', row.classList.contains('done') ? 'true' : 'false');
-      updateSummary();
+
+      // PRIMEIRO salva o estado no banco local
       saveCurrentDay();
+      // DEPOIS atualiza os totais do mês lendo os dados atualizados
+      updateSummary();
       renderCalendar();
     }
 
@@ -544,8 +559,10 @@
         const m = r.querySelector('.task-row-main');
         if (m) m.setAttribute('aria-pressed', 'false');
       });
-      updateSummary();
+
+      // Mesma correção na ordem
       saveCurrentDay();
+      updateSummary();
       renderCalendar();
     }
 
@@ -592,7 +609,6 @@
       }
     });
 
-    letdnts/sistema-pontos
 
     (function init() {
       const now = new Date();
@@ -610,17 +626,20 @@
   <!-- Firebase (opcional) - adicione suas credenciais no objeto firebaseConfig -->
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+
+  <script src="firebase-config.js"></script>
+
   <script>
     (function () {
-      if (typeof firebase === 'undefined') return;
+      if (typeof firebase === 'undefined' || typeof firebaseConfig === 'undefined') {
+        console.error('Firebase ou Configuração não encontrados!');
+        return;
+      }
+
       try {
-        const firebaseConfig = {
-          databaseURL: "https://pontos-rotina-default-rtdb.firebaseio.com/",
-          // adicione aqui sua apiKey, authDomain, projectId, etc.
-        };
+        // 3. Inicializa usando a variável que veio do seu arquivo .js
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
-        let __writing = false;
 
         function saveRemote() {
           if (!database) return;
