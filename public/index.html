@@ -671,18 +671,8 @@
     // TODO: Add SDKs for Firebase products that you want to use
     // https://firebase.google.com/docs/web/setup#available-libraries
 
-    // Your web app's Firebase configuration
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-    const firebaseConfig = {
-      apiKey: "AIzaSyCxUeg08wHFPxI15VVtN5zTointEKC_Yr0",
-      authDomain: "pontos-rotina.firebaseapp.com",
-      databaseURL: "https://pontos-rotina-default-rtdb.firebaseio.com",
-      projectId: "pontos-rotina",
-      storageBucket: "pontos-rotina.firebasestorage.app",
-      messagingSenderId: "469841085463",
-      appId: "1:469841085463:web:2e9a0212aa94588e44c852",
-      measurementId: "G-ZWNBLVCT0M"
-    };
+    // Import Firebase config from external module
+    import { firebaseConfig } from './firebase-config.js';
 
     // Initialize Firebase
     const app = initializeApp(firebaseConfig);
